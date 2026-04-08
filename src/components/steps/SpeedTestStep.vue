@@ -14,7 +14,6 @@ function renderGauge() {
   const sp = store.speedResult
   const dev = store.deviceInfo
   if (!box || !sp || !dev) return
-  const t = getThresholds(dev.networkType)
   const max = NORMAL_DOWNLOAD_MBPS.max
   const value = Math.min(sp.downloadMbps, max)
   if (!chart) chart = echarts.init(box)
