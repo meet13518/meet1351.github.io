@@ -1,0 +1,66 @@
+/**
+ * 黑客风：仅在 html.dark.hacker 下覆盖（依赖 element-plus/theme-chalk/dark/css-vars.css）
+ */
+html.dark.hacker {
+  --el-color-primary: #00e676;
+  --el-color-primary-light-3: #4caf50;
+  --el-color-primary-light-5: #2e7d32;
+  --el-color-primary-light-7: #1b5e20;
+  --el-color-primary-light-8: #145214;
+  --el-color-primary-light-9: #0d3d0d;
+  --el-color-primary-dark-2: #00c853;
+
+  --el-bg-color-page: #050508;
+  --el-bg-color: #0a0e0c;
+  --el-bg-color-overlay: #121a16;
+
+  --el-fill-color: #141c18;
+  --el-fill-color-light: #1a2420;
+  --el-fill-color-lighter: #1e2a24;
+  --el-fill-color-extra-light: #223028;
+  --el-fill-color-blank: #0a0e0c;
+  --el-fill-color-dark: #0d120f;
+
+  --el-text-color-primary: #c8f5dc;
+  --el-text-color-regular: #9ed4b8;
+  --el-text-color-secondary: #6abf8a;
+  --el-text-color-placeholder: #4a8f66;
+  --el-text-color-disabled: #3d6b4f;
+
+  --el-border-color: #1f3d2a;
+  --el-border-color-light: #1a3322;
+  --el-border-color-lighter: #152a1c;
+  --el-border-color-extra-light: #122418;
+  --el-border-color-dark: #2a5c3d;
+  --el-border-color-darker: #34704a;
+
+  --el-mask-color: rgba(0, 20, 10, 0.65);
+  --el-box-shadow: 0 2px 12px rgba(0, 255, 120, 0.08);
+  --el-box-shadow-light: 0 0 8px rgba(0, 230, 118, 0.12);
+
+  --mifi-border: #1f3d2a;
+  --mifi-header-bg: #080c0a;
+  --mifi-console-bg: #0a100c;
+
+  font-family: ui-monospace, 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas,
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+html.dark.hacker body {
+  background-color: var(--el-bg-color-page);
+}
+
+/* 去控控制台终端色与黑客主色统一（.flow-console 为组件根类名） */
+html.dark.hacker .flow-console {
+  --term-bg: #060806;
+  --term-bg-head: #0a120e;
+  --term-border: #1f3d2a;
+  --term-fg: #b8f5d0;
+  --term-dim: #4a9d6a;
+  --term-info: #00e676;
+  --term-warn: #d4e157;
+  --term-err: #ff5252;
+  --term-scroll-track: #0a100c;
+  --term-scroll-thumb: #2a5c3d;
+  --term-scroll-thumb-hover: #34704a;
+}
