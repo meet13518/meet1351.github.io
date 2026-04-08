@@ -4,8 +4,9 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
-export default defineConfig({
-  base: '/',
+// 仓库为 meet13518/meet1351.github.io → Pages 在子路径 /meet1351.github.io/，不能用 '/'
+export default defineConfig(({ mode }) => ({
+  base: mode === 'production' ? '/meet1351.github.io/' : '/',
   plugins: [
     vue(),
     {
@@ -22,4 +23,4 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-})
+}))
