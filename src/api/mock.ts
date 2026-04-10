@@ -150,8 +150,13 @@ export async function postSpeedtest(
   return buildSpeedTestResult(device, cfg.actualHighspeedGB, opts)
 }
 
-export async function postRemoveLimit(): Promise<{ success: boolean; message: string }> {
+export async function postRemoveLimit(
+  locale: 'zh' | 'en' = 'zh',
+): Promise<{ success: boolean; message: string }> {
   await delay(1000)
   /** 固定成功，保证「去限速 → 回诊断 → 再测速」流程可完整走通 */
-  return { success: true, message: '解除限速请求已受理' }
+  return {
+    success: true,
+    message: locale === 'en' ? 'Rate-limit removal request accepted' : '解除限速请求已受理',
+  }
 }

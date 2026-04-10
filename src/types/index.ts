@@ -26,6 +26,11 @@ export interface Diagnosis {
   conclusion: string
   severity: 'info' | 'warning' | 'error'
   suggestion: string
+  /** 是否建议执行去除限速（与结论文案解耦，便于多语言） */
+  eligibleForRemoveLimit: boolean
+  /** 控制台英文行（界面仍以 conclusion/suggestion 为主） */
+  conclusionEn: string
+  suggestionEn: string
 }
 
 export interface RemoveLimitRecord {
@@ -40,4 +45,8 @@ export interface ConsoleLogEntry {
   time: string
   level: 'info' | 'warning' | 'error'
   message: string
+  /** 去控控制台：阶段开始行；table_line 为等宽表格打印行 */
+  entryType?: 'log' | 'phase_header' | 'table_line'
+  /** 与 removeLimitPhase 一致，0～3 */
+  phaseIndex?: number
 }

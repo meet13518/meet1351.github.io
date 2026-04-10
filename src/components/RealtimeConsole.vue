@@ -1,20 +1,27 @@
 <script setup lang="ts">
 import { Delete, DocumentCopy } from '@element-plus/icons-vue'
-import { nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
+import { useSettingsStore } from '@/stores/settings'
+import { useConsoleAutoScroll } from '@/composables/useConsoleAutoScroll'
+import { cui } from '@/utils/consoleI18n'
 import type { ConsoleLogEntry } from '@/types'
 
 const store = useAppStore()
+const { settings } = storeToRefs(useSettingsStore())
+const ui = computed(() => cui(settings.value.consoleOutputLocale))
 const scroller = ref<HTMLElement | null>(null)
+const { onScroll, scrollToBottomIfStuck, forceStickToBottom } = useConsoleAutoScroll(scroller)
 
 watch(
   () => store.consoleLogs.length,
-  async () => {
-    await nextTick()
-    const el = scroller.value
-    if (el) el.scrollTop = el.scrollHeight
+  (n) => {
+    if (n === 0) forceStickToBottom()
+    scrollToBottomIfStuck()
   },
+  { flush: 'post' },
 )
 
 function levelClass(level: ConsoleLogEntry['level']) {
@@ -25,9 +32,9 @@ async function copyLine(line: ConsoleLogEntry) {
   const text = `[${line.time}] ${line.message}`
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制')
+    ElMessage.success(ui.value.copyOk)
   } catch {
-    ElMessage.error('复制失败')
+    ElMessage.error(ui.value.copyFail)
   }
 }
 
@@ -35,7 +42,7 @@ function topSuggestion(): string | null {
   const logs = store.consoleLogs
   for (let i = logs.length - 1; i >= 0; i--) {
     const m = logs[i]?.message ?? ''
-    if (m.includes('诊断结论') || m.includes('建议')) return m
+    if (m.includes('诊断结论') || m.includes('建议') || m.includes('Diagnosis:')) return m
   }
   return null
 }
@@ -46,10 +53,10 @@ function topSuggestion(): string | null {
     <div class="console-head">
       <div class="head-left">
         <span class="traffic" aria-hidden="true" />
-        <span class="console-title">实时控制台</span>
-        <span class="head-sub">. / bash — 终端</span>
+        <span class="console-title">{{ ui.realtimeTitle }}</span>
+        <span class="head-sub">{{ ui.realtimeSub }}</span>
       </div>
-      <el-button class="btn-clear" :icon="Delete" size="small" text @click="store.clearLogs">清空</el-button>
+      <el-button class="btn-clear" :icon="Delete" size="small" text @click="store.clearLogs">{{ ui.clear }}</el-button>
     </div>
     <div v-if="topSuggestion()" class="console-hint">
       <span class="hint-prompt">#</span>
@@ -60,11 +67,12 @@ function topSuggestion(): string | null {
       class="console-body terminal-scroll"
       role="log"
       aria-live="polite"
-      aria-label="终端输出，可滚动查看"
+      :aria-label="ui.ariaRealtime"
+      @scroll.passive="onScroll"
     >
       <div v-if="!store.consoleLogs.length" class="empty">
         <span class="empty-prompt">$</span>
-        <span>等待输出…</span>
+        <span>{{ ui.waitRealtime }}</span>
       </div>
       <div
         v-for="line in store.consoleLogs"
@@ -186,14 +194,16 @@ function topSuggestion(): string | null {
   flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   padding: 10px 0 12px 10px;
   font-family: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--term-fg);
   background: var(--term-bg);
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* WebKit：滚动条轨道与滑块，类系统终端风格 */
@@ -234,20 +244,9 @@ function topSuggestion(): string | null {
   padding: 3px 8px 3px 4px;
   margin-bottom: 2px;
   border-radius: 2px;
-  animation: log-in 0.28s ease;
 }
 .log-row:hover {
   background: rgba(255, 255, 255, 0.04);
-}
-@keyframes log-in {
-  from {
-    opacity: 0;
-    transform: translateX(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 .log-prompt {

@@ -1,3 +1,6 @@
+/** 控制台打印文案语言（仅影响日志输出，不切换整个应用 UI） */
+export type ConsoleOutputLocale = 'zh' | 'en'
+
 /** 应用侧可配置的套餐、设备与限速规则（用于检测与诊断） */
 export interface AppSettings {
   /** WiFi / 对外套餐名称 */
@@ -28,6 +31,12 @@ export interface AppSettings {
    * - vendor_virtual_limit: 商家流量虚标导致提前触发运营商限速
    */
   limitCause: 'normal' | 'signal_weak' | 'operator_limit' | 'vendor_virtual_limit'
+  /**
+   * 仅影响「实时控制台 / 去控控制台」内打印文案语言；界面其它文案仍为中文。
+   * - zh：中文
+   * - en：英文
+   */
+  consoleOutputLocale: ConsoleOutputLocale
 }
 
 export const defaultSettings: AppSettings = {
@@ -44,4 +53,5 @@ export const defaultSettings: AppSettings = {
   weakSignalDbm: -95,
   vendorVirtualPercent: 30,
   limitCause: 'normal',
+  consoleOutputLocale: 'zh',
 }

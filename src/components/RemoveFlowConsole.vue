@@ -1,22 +1,35 @@
 <script setup lang="ts">
 import { DocumentCopy } from '@element-plus/icons-vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { ConsoleLogEntry } from '@/types'
-import { REMOVE_LIMIT_PHASES } from '@/utils/removeLimitPhases'
+import type { ConsoleOutputLocale } from '@/types/settings'
+import { useConsoleAutoScroll } from '@/composables/useConsoleAutoScroll'
+import { cui } from '@/utils/consoleI18n'
 
-const props = defineProps<{
-  logs: ConsoleLogEntry[]
-  overallPercent: number
-  phaseProgress: [number, number, number, number]
-  loading?: boolean
-}>()
+interface PhaseSection {
+  header: ConsoleLogEntry
+  body: ConsoleLogEntry[]
+}
 
-const phaseTitles = computed(() => REMOVE_LIMIT_PHASES.map((p) => p.title))
+const props = withDefaults(
+  defineProps<{
+    logs: ConsoleLogEntry[]
+    overallPercent: number
+    phaseProgress: [number, number, number, number]
+    loading?: boolean
+    /** 与 store.removeLimitPhase 一致：仅当前阶段进度条显示流动动画 */
+    activePhase?: number
+    /** 与「应用配置」中的控制台语言一致 */
+    consoleLocale?: ConsoleOutputLocale
+  }>(),
+  { consoleLocale: 'zh' },
+)
+
+const ui = computed(() => cui(props.consoleLocale))
 
 const BAR_WIDTH = 20
 
-/** 文本「打印」式进度条，如 [████████░░░░░░░░░░░░] */
 function printBar(percent: number, width = BAR_WIDTH): string {
   const p = Math.min(100, Math.max(0, percent))
   const filled = Math.round((p / 100) * width)
@@ -26,39 +39,84 @@ function printBar(percent: number, width = BAR_WIDTH): string {
 
 const overallPrinted = computed(() => {
   const p = Math.min(100, Math.max(0, props.overallPercent))
-  return `总进度  ${printBar(p)}  ${String(p).padStart(3)}%`
+  return `${ui.value.overallPrefix}  ${printBar(p)}  ${String(p).padStart(3)}%`
 })
 
-const phasePrintedLines = computed(() => {
-  return phaseTitles.value.map((title, i) => {
-    const p = Math.min(100, Math.max(0, props.phaseProgress[i] ?? 0))
-    const idx = String(i + 1).padStart(2, '0')
-    return `[${idx}] ${title}  ${printBar(p)}  ${String(p).padStart(3)}%`
-  })
+const activePhaseSafe = computed(() =>
+  typeof props.activePhase === 'number' ? props.activePhase : -1,
+)
+
+function phasePercent(phaseIndex: number): number {
+  return Math.min(100, Math.max(0, props.phaseProgress[phaseIndex] ?? 0))
+}
+
+/** 阶段头 + 该阶段内日志，便于进度条区域 sticky 吸顶 */
+const groupedView = computed(() => {
+  const prefix: ConsoleLogEntry[] = []
+  const sections: PhaseSection[] = []
+  let current: PhaseSection | null = null
+  for (const line of props.logs) {
+    if (line.entryType === 'phase_header') {
+      if (current) sections.push(current)
+      current = { header: line, body: [] }
+    } else if (current) {
+      current.body.push(line)
+    } else {
+      prefix.push(line)
+    }
+  }
+  if (current) sections.push(current)
+  return { prefix, sections }
 })
 
 const scroller = ref<HTMLElement | null>(null)
+const { onScroll, scrollToBottomIfStuck, forceStickToBottom } = useConsoleAutoScroll(scroller)
 
 watch(
   () => props.logs.length,
-  async () => {
-    await nextTick()
-    const el = scroller.value
-    if (el) el.scrollTop = el.scrollHeight
+  (n) => {
+    if (n === 0) forceStickToBottom()
   },
+)
+
+watch(
+  () => [props.logs.length, props.overallPercent, props.phaseProgress.join(',')] as const,
+  scrollToBottomIfStuck,
+  { flush: 'post' },
+)
+
+watch(
+  () => props.loading,
+  (v) => {
+    if (v) {
+      forceStickToBottom()
+      scrollToBottomIfStuck()
+    }
+  },
+  { flush: 'post' },
 )
 
 function levelClass(level: ConsoleLogEntry['level']) {
   return `log-row--${level}`
 }
 
+function isTableLine(line: ConsoleLogEntry): boolean {
+  return line.entryType === 'table_line'
+}
+
 async function copyLine(line: ConsoleLogEntry) {
-  const text = `[${line.time}] ${line.message}`
+  let text: string
+  if (line.entryType === 'phase_header') {
+    const n = (line.phaseIndex ?? 0) + 1
+    text = `[${line.time}] ${ui.value.phaseLine(n, line.message)}`
+  } else {
+    text = `[${line.time}] ${line.message}`
+  }
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制')
+    ElMessage.success(ui.value.copyOk)
   } catch {
-    ElMessage.error('复制失败')
+    ElMessage.error(ui.value.copyFail)
   }
 }
 </script>
@@ -68,51 +126,128 @@ async function copyLine(line: ConsoleLogEntry) {
     <div class="console-head">
       <div class="head-left">
         <span class="traffic" aria-hidden="true" />
-        <span class="console-title">去控控制台</span>
-        <span class="head-sub">日志流 · GTP / PFCP / PCC</span>
+        <span class="console-title">{{ ui.removeTitle }}</span>
+        <span class="head-sub">{{ ui.removeSub }}</span>
       </div>
     </div>
-    <div class="progress-panel" aria-label="文本进度输出">
-      <div class="progress-banner"># 进度输出（文本条）</div>
-      <pre class="printed-line printed-line--total" :class="{ 'is-busy': loading }">{{ overallPrinted }}{{ loading ? ' ▌' : '' }}</pre>
-      <pre
-        v-for="(line, i) in phasePrintedLines"
-        :key="i"
-        class="printed-line printed-line--phase"
-        :class="{ 'is-busy': loading && (phaseProgress[i] ?? 0) > 0 && (phaseProgress[i] ?? 0) < 100 }"
-      >{{ line }}</pre>
-    </div>
-    <div ref="scroller" class="console-body terminal-scroll" role="log" aria-live="polite" aria-label="去控过程输出">
-      <div v-if="!logs.length" class="empty">
+    <div
+      ref="scroller"
+      class="console-body terminal-scroll"
+      role="log"
+      aria-live="polite"
+      :aria-label="ui.ariaRemove"
+      @scroll.passive="onScroll"
+    >
+      <div v-if="!logs.length && !loading" class="empty">
         <span class="empty-prompt">&gt;</span>
-        <span>等待指令…</span>
+        <span>{{ ui.waitRemove }}</span>
       </div>
-      <div
-        v-for="line in logs"
-        :key="line.id"
-        class="log-row"
-        :class="levelClass(line.level)"
-      >
-        <span class="log-prompt" aria-hidden="true">&gt;</span>
-        <div class="log-main">
-          <time class="log-time" :datetime="line.time">{{ line.time }}</time>
-          <span class="log-msg">{{ line.message }}</span>
+      <template v-else>
+        <div v-if="loading" class="console-overall">
+          <span class="log-prompt" aria-hidden="true">&gt;</span>
+          <pre class="console-overall__pre" :class="{ 'is-busy': loading }">{{ overallPrinted }}{{ loading ? ' ▌' : '' }}</pre>
         </div>
-        <el-button
-          class="log-copy"
-          :icon="DocumentCopy"
-          text
-          size="small"
-          aria-label="复制本条"
-          @click="copyLine(line)"
-        />
-      </div>
+        <template v-for="line in groupedView.prefix" :key="line.id">
+          <div
+            v-if="isTableLine(line)"
+            class="table-block"
+          >
+            <pre class="table-block__pre">{{ line.message }}</pre>
+          </div>
+          <div
+            v-else
+            class="log-row"
+            :class="levelClass(line.level)"
+          >
+            <span class="log-prompt" aria-hidden="true">&gt;</span>
+            <div class="log-main">
+              <time class="log-time" :datetime="line.time">{{ line.time }}</time>
+              <span class="log-msg">{{ line.message }}</span>
+            </div>
+            <el-button
+              class="log-copy"
+              :icon="DocumentCopy"
+              text
+              size="small"
+              aria-label="复制本条"
+              @click="copyLine(line)"
+            />
+          </div>
+        </template>
+        <div
+          v-for="sec in groupedView.sections"
+          :key="sec.header.id"
+          class="phase-section"
+        >
+          <div class="phase-section__sticky">
+            <div class="phase-block">
+              <div class="phase-block__head">
+                <span class="log-prompt" aria-hidden="true">&gt;</span>
+                <div class="phase-block__meta">
+                  <time class="log-time" :datetime="sec.header.time">{{ sec.header.time }}</time>
+                  <span class="phase-block__title">{{ ui.phaseLine((sec.header.phaseIndex ?? 0) + 1, sec.header.message) }}</span>
+                </div>
+                <el-button
+                  class="log-copy"
+                  :icon="DocumentCopy"
+                  text
+                  size="small"
+                  aria-label="复制本阶段标题"
+                  @click="copyLine(sec.header)"
+                />
+              </div>
+              <div class="phase-block__bar">
+                <el-progress
+                  :percentage="phasePercent(sec.header.phaseIndex ?? 0)"
+                  :stroke-width="10"
+                  striped
+                  :striped-flow="!!loading && activePhaseSafe === sec.header.phaseIndex"
+                  class="phase-block__progress"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="phase-section__body">
+            <template v-for="line in sec.body" :key="line.id">
+              <div
+                v-if="isTableLine(line)"
+                class="table-block"
+              >
+                <pre class="table-block__pre">{{ line.message }}</pre>
+              </div>
+              <div
+                v-else
+                class="log-row"
+                :class="levelClass(line.level)"
+              >
+                <span class="log-prompt" aria-hidden="true">&gt;</span>
+                <div class="log-main">
+                  <time class="log-time" :datetime="line.time">{{ line.time }}</time>
+                  <span class="log-msg">{{ line.message }}</span>
+                </div>
+                <el-button
+                  class="log-copy"
+                  :icon="DocumentCopy"
+                  text
+                  size="small"
+                  aria-label="复制本条"
+                  @click="copyLine(line)"
+                />
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
 .flow-console {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
   --term-bg: #0c0c0c;
   --term-bg-head: #1a1a1a;
   --term-border: #2d2d2d;
@@ -124,10 +259,6 @@ async function copyLine(line: ConsoleLogEntry) {
   --term-scroll-track: #141414;
   --term-scroll-thumb: #454545;
   --term-scroll-thumb-hover: #5c5c5c;
-
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
   height: min(720px, 78vh);
   min-height: 420px;
   border: 1px solid var(--term-border);
@@ -135,52 +266,6 @@ async function copyLine(line: ConsoleLogEntry) {
   background: var(--term-bg);
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-/* 进度区：与终端同壳，深色底，位于标题栏与日志之间 */
-.progress-panel {
-  flex-shrink: 0;
-  padding: 10px 12px 12px;
-  background: #121212;
-  border-bottom: 1px solid var(--term-border);
-  font-family: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
-}
-.progress-banner {
-  font-size: 11px;
-  color: #6a9955;
-  margin-bottom: 6px;
-  user-select: none;
-}
-.printed-line {
-  margin: 0 0 3px;
-  padding: 0;
-  font-size: 11px;
-  line-height: 1.45;
-  white-space: pre;
-  overflow-x: auto;
-  color: #4ec9b0;
-  font-variant-numeric: tabular-nums;
-  tab-size: 4;
-}
-.printed-line--total {
-  color: #b5e0b8;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.printed-line--phase {
-  color: #7fd0be;
-}
-.printed-line.is-busy {
-  animation: printed-dim 1.1s ease-in-out infinite;
-}
-@keyframes printed-dim {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.82;
-  }
 }
 
 .console-head {
@@ -221,17 +306,98 @@ async function copyLine(line: ConsoleLogEntry) {
 }
 
 .console-body {
+  --console-scroll-pad-top: 10px;
   flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: scroll;
-  padding: 10px 0 12px 10px;
+  overflow-y: auto;
+  padding: var(--console-scroll-pad-top) 0 12px 10px;
   font-family: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--term-fg);
   background: var(--term-bg);
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.console-overall {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 8px 10px 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--term-border);
+}
+.console-overall__pre {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: #b5e0b8;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.console-overall__pre.is-busy {
+  animation: printed-dim 1.1s ease-in-out infinite;
+}
+
+.phase-section {
+  margin-bottom: 4px;
+}
+.phase-section__sticky {
+  /* 与 .console-body 上内边距抵消，吸顶时贴齐滚动区顶边不留缝 */
+  position: sticky;
+  top: calc(-1 * var(--console-scroll-pad-top));
+  z-index: 5;
+  padding: calc(var(--console-scroll-pad-top) + 6px) 0 8px;
+  margin: calc(-1 * (var(--console-scroll-pad-top) + 6px)) 0 0;
+  background: var(--term-bg);
+  box-shadow: 0 8px 12px -4px rgba(0, 0, 0, 0.65);
+}
+.phase-section__sticky .phase-block {
+  margin-bottom: 0;
+}
+.phase-section__body {
+  padding-top: 2px;
+}
+
+.phase-block {
+  padding: 8px 8px 12px 4px;
+  margin-bottom: 6px;
+  border-left: 2px solid var(--el-color-primary);
+  padding-left: 10px;
+  margin-left: 2px;
+  background: rgba(64, 158, 255, 0.06);
+  border-radius: 0 6px 6px 0;
+}
+.phase-block__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px 8px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+.phase-block__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phase-block__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7fd0be;
+  word-break: break-word;
+}
+.phase-block__bar {
+  padding-left: 0;
+}
+.phase-block__progress :deep(.el-progress-bar__outer) {
+  background-color: #2a2a2a;
 }
 
 .terminal-scroll::-webkit-scrollbar {
@@ -251,6 +417,24 @@ async function copyLine(line: ConsoleLogEntry) {
 .terminal-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--term-scroll-thumb) var(--term-scroll-track);
+}
+
+.table-block {
+  margin: 6px 4px 10px 2px;
+  padding: 10px 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(78, 201, 176, 0.22);
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.table-block__pre {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-x: auto;
+  color: #9cdcfe;
+  font-variant-numeric: tabular-nums;
 }
 
 .log-row {
@@ -298,7 +482,8 @@ async function copyLine(line: ConsoleLogEntry) {
   color: #aaa !important;
   align-self: start;
 }
-.log-row:hover .log-copy {
+.log-row:hover .log-copy,
+.phase-block__head:hover .log-copy {
   opacity: 0.95;
 }
 .empty {
@@ -313,5 +498,14 @@ async function copyLine(line: ConsoleLogEntry) {
   color: var(--term-dim);
   user-select: none;
   font-weight: 600;
+}
+@keyframes printed-dim {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
 }
 </style>

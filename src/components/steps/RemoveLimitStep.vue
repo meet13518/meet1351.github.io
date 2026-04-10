@@ -2,11 +2,15 @@
 import { DocumentCopy } from '@element-plus/icons-vue'
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
+import { useSettingsStore } from '@/stores/settings'
 import { getThresholds } from '@/utils/diagnosis'
 import RemoveFlowConsole from '@/components/RemoveFlowConsole.vue'
 
 const store = useAppStore()
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
 const guideVisible = ref(false)
 /** 一键去控：弹窗内展示去控控制台日志 */
 const removeConsoleVisible = ref(false)
@@ -30,13 +34,6 @@ const removeDisabledHint = computed(() => {
   return '当前诊断无需执行去限速'
 })
 
-/** 去控进行中：当前步骤（0～3 对应四个阶段） */
-const removeStepActive = computed(() => {
-  const p = store.removeLimitPhase
-  if (p < 0) return 0
-  return Math.min(p, 3)
-})
-
 async function onRemoveLimitClick() {
   removeConsoleVisible.value = true
   await store.runRemoveLimit()
@@ -55,26 +52,6 @@ async function copyGuide() {
 
 <template>
   <div class="remove-step">
-    <transition name="fade">
-      <el-card v-if="store.removeLoading" shadow="never" class="process-card">
-        <div class="process-title">去控进行中</div>
-        <el-steps :active="removeStepActive" align-center finish-status="success">
-          <el-step title="连接通道" description="与设备管理通道握手" />
-          <el-step title="扫描策略" description="识别限速相关进程" />
-          <el-step title="执行去控" description="下发解除与同步指令" />
-          <el-step title="同步侧" description="等待运营商策略刷新" />
-        </el-steps>
-        <el-progress
-          class="process-bar"
-          :percentage="Math.min(100, Math.max(0, (removeStepActive + 1) * 25))"
-          :stroke-width="12"
-          striped
-          striped-flow
-        />
-        <p class="process-hint">请稍候，去控过程约 8 秒…</p>
-      </el-card>
-    </transition>
-
     <transition name="fade">
       <el-card v-if="store.removeLimitSucceeded && store.diagnosis && store.speedResult" shadow="never" class="snapshot-card">
         <el-result icon="success" title="去控成功" sub-title="以下为去控前本次网速诊断数据，请核对后再前往验证测速。">
@@ -186,6 +163,8 @@ async function copyGuide() {
         :overall-percent="store.removeOverallPercent"
         :phase-progress="store.removePhaseProgress"
         :loading="store.removeLoading"
+        :active-phase="store.removeLimitPhase"
+        :console-locale="settings.consoleOutputLocale"
       />
       <template #footer>
         <el-button type="primary" :disabled="store.removeLoading" @click="removeConsoleVisible = false">
@@ -199,23 +178,6 @@ async function copyGuide() {
 <style scoped>
 .remove-step {
   min-height: 220px;
-}
-.process-card {
-  margin-bottom: 16px;
-  border-radius: 12px;
-}
-.process-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 16px;
-}
-.process-bar {
-  margin-top: 20px;
-}
-.process-hint {
-  margin: 10px 0 0;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
 }
 .snapshot-card {
   margin-bottom: 16px;

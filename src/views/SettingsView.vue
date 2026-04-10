@@ -66,6 +66,19 @@ function goHome() {
 
     <el-form label-position="top" class="form" @submit.prevent="onSave">
       <el-card shadow="never" class="block">
+        <template #header>控制台输出语言</template>
+        <p class="card-desc">
+          仅影响主页「实时控制台」与去限速弹窗内日志行的语言；界面按钮、表单与诊断卡片仍为中文。
+        </p>
+        <el-form-item label="日志语言">
+          <el-radio-group v-model="form.consoleOutputLocale" class="locale-group">
+            <el-radio value="zh" border>中文</el-radio>
+            <el-radio value="en" border>English</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-card>
+
+      <el-card shadow="never" class="block">
         <template #header>套餐信息</template>
         <el-row :gutter="16">
           <el-col :xs="24" :md="12">
@@ -242,5 +255,16 @@ function goHome() {
 }
 .mt-8 {
   margin-top: 8px;
+}
+.card-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.55;
+}
+.locale-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 </style>

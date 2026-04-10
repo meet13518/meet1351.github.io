@@ -51,6 +51,10 @@ export function computeDiagnosis(
       conclusion: '网络正常',
       severity: 'info',
       suggestion: '去除限速后再次测速，上下行速率及延迟、抖动均已处于正常范围。',
+      eligibleForRemoveLimit: false,
+      conclusionEn: 'Network nominal',
+      suggestionEn:
+        'Post rate-limit removal: downlink/uplink throughput, latency, and jitter are within normal range.',
     }
   }
 
@@ -59,6 +63,9 @@ export function computeDiagnosis(
       conclusion: '信号弱',
       severity: 'warning',
       suggestion: `当前信号低于阈值（${options.weakSignalDbm} dBm）。建议先优化摆放位置、避开遮挡后再测速。`,
+      eligibleForRemoveLimit: false,
+      conclusionEn: 'Weak RF signal',
+      suggestionEn: `Signal is below threshold (${options.weakSignalDbm} dBm). Reposition the device and retest.`,
     }
   }
   if (device.limitedStatus === 'operator_limit') {
@@ -66,6 +73,10 @@ export function computeDiagnosis(
       conclusion: '运营商限速',
       severity: 'error',
       suggestion: '信号正常但高速流量为 0，且检测到限速程序，符合运营商限速特征。建议执行去限速流程。',
+      eligibleForRemoveLimit: true,
+      conclusionEn: 'Operator rate limiting',
+      suggestionEn:
+        'RF is healthy but high-speed allowance reads 0; throttling signature detected. Run the rate-limit removal flow.',
     }
   }
   if (device.limitedStatus === 'vendor_virtual_limit') {
@@ -74,6 +85,9 @@ export function computeDiagnosis(
       conclusion: '商家流量虚标导致提前触发运营商限速',
       severity: 'error',
       suggestion: `信号正常但高速流量为 0，检测到限速程序；当前虚标比例约 ${ratio}%。建议先执行去限速，并保留证据反馈商家。`,
+      eligibleForRemoveLimit: true,
+      conclusionEn: 'Vendor quota mislabeling triggering operator throttle',
+      suggestionEn: `High-speed bucket reads 0; throttle detected; estimated vendor overstatement ~${ratio}%. Remove limit and retain evidence for the vendor.`,
     }
   }
   if (device.limitedStatus === 'normal') {
@@ -81,6 +95,9 @@ export function computeDiagnosis(
       conclusion: '网络正常',
       severity: 'info',
       suggestion: '信号处于正常范围，流量虚标 0%，且未检测到限速程序，无需执行去限速操作。',
+      eligibleForRemoveLimit: false,
+      conclusionEn: 'Network nominal',
+      suggestionEn: 'RF healthy, 0% quota mislabel, no throttle signature; no removal needed.',
     }
   }
 
@@ -89,6 +106,9 @@ export function computeDiagnosis(
       conclusion: '网络正常',
       severity: 'info',
       suggestion: '信号处于正常范围，流量虚标 0%，且未检测到限速程序，无需执行去限速操作。',
+      eligibleForRemoveLimit: false,
+      conclusionEn: 'Network nominal',
+      suggestionEn: 'RF healthy, 0% quota mislabel, no throttle signature; no removal needed.',
     }
   }
 
@@ -96,9 +116,12 @@ export function computeDiagnosis(
     conclusion: '网络异常',
     severity: 'warning',
     suggestion: '部分指标未达理想范围，可重新测速或检查是否处于业务高峰时段。',
+    eligibleForRemoveLimit: false,
+    conclusionEn: 'Metrics abnormal',
+    suggestionEn: 'Some KPIs are off-target; rerun the test or retry off-peak hours.',
   }
 }
 
 export function needsRemoveLimitAction(d: Diagnosis): boolean {
-  return d.conclusion === '运营商限速' || d.conclusion === '商家流量虚标导致提前触发运营商限速'
+  return d.eligibleForRemoveLimit === true
 }
